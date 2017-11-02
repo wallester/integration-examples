@@ -111,6 +111,17 @@ command line (for example, on a Mac).
 You will need to enter a password. For the .NET sample code included in this repository,
 use the password "123456".
 
+## Example Node.js source code
+
+Please take a look at example.js
+
+### Install dependencies
+
+	make install
+
+### Run code
+
+	make run
 
 ## Example request and response
 
