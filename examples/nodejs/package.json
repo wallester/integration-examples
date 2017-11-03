@@ -1,0 +1,20 @@
+{
+    "name": "example",
+    "version": "1.0.0",
+    "description": "example of JWT integration",
+    "main": "example.js",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/wallester/api.git"
+    },
+    "author": "Wallester",
+    "license": "UNLICENSED",
+    "bugs": {
+        "url": "https://github.com/wallester/api"
+    },
+    "homepage": "https://github.com/wallester/api",
+    "dependencies": {
+        "jsonwebtoken": "8.1.0",
+        "request": "2.83.0"
+    }
+}

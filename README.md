@@ -11,13 +11,13 @@ To choose a library for JWT please see https://jwt.io
 
 ## Create keys for signing and verifying JWT requests
 
-	openssl genrsa -out sample_key.priv 2048
-	openssl rsa -in sample_key.priv -pubout > sample_key.pub
+	openssl genrsa -out example_private 2048
+	openssl rsa -in example_private -pubout > example_public
 
 
 ## Exchange keys with Wallester
 
-Send your public key (sample_key.pub) to Wallester and you will receive
+Send your public key (example_public) to Wallester and you will receive
 - Wallester public key
 - Wallester certificate containing the public key
 - Wallester audience ID string
@@ -77,8 +77,8 @@ The example code uses Gradle build tool https://gradle.org/install/
 
 ### To use openssl generated keys in Java, convert the keys to PKCS8 format:
 
-	openssl pkcs8 -topk8 -inform PEM -outform DER -in sample_key.priv -nocrypt > sample_key.priv.pkcs8
-	openssl rsa -in sample_key.priv -pubout -outform DER -out sample_key.pub.pkcs8
+	openssl pkcs8 -topk8 -inform PEM -outform DER -in example_private -nocrypt > example_private.pkcs8
+	openssl rsa -in example_private -pubout -outform DER -out example_public.pkcs8
 
 
 ## Example .NET source code
@@ -105,12 +105,23 @@ command line (for example, on a Mac).
 
 ### To use openssl generated key in .NET
 
-	openssl req -new -x509 -nodes -sha256 -days 1100 -key sample_key.priv > sample_key.cer
-	openssl pkcs12 -export -in sample_key.cer -inkey sample_key.priv -out sample_key.pkcs12
+	openssl req -new -x509 -nodes -sha256 -days 1100 -key example_private > example_private.cer
+	openssl pkcs12 -export -in example_private.cer -inkey example_private -out example_private.pkcs12
 
 You will need to enter a password. For the .NET sample code included in this repository,
 use the password "123456".
 
+## Example Node.js source code
+
+Please take a look at example.js
+
+### Install dependencies
+
+	make install
+
+### Run code
+
+	make run
 
 ## Example request and response
 
