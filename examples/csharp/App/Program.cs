@@ -31,16 +31,16 @@ namespace App
 
             var request = new PingRequest
             {
-                message = "ping"
+                Message = "ping"
             };
             var requestBody = JsonConvert.SerializeObject(request);
 
             var responseBody = DoRequest(requestBody, signingCredentials, wallesterPublicKey);
 
             var response = JsonConvert.DeserializeObject<PingResponse>(responseBody);
-            if (response.message != "pong")
+            if (response.Message != "pong")
             {
-                throw new ApplicationException("Invalid response message, expected 'pong', got '" + response.message + "'");
+                throw new ApplicationException("Invalid response message, expected 'pong', got '" + response.Message + "'");
             }
 
             Console.ReadKey();

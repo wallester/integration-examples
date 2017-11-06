@@ -1,7 +1,10 @@
+using Newtonsoft.Json;
+
 namespace App
 {
-    class PingResponse
+    public class PingResponse
     {
-        public string message = "";
+        [JsonProperty("message")]
+        public string Message { get; set; }
     }
 }
