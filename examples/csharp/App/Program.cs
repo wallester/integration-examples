@@ -20,7 +20,7 @@ namespace App
         private static string _audience = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
 
         // Replace this with actual Wallester API URL
-        private static string _apiURL = "http://xxx.wallester.eu/api/v1/test/ping";
+        private static string _apiURL = "http://xxx.wallester.eu/v1/test/ping";
 
         private static string _subject = "api-request";
 
@@ -103,7 +103,7 @@ namespace App
                     Console.WriteLine("Response is not trusted: " + e);
                 }
             }
-            
+
             return responseString;
         }
 
@@ -121,17 +121,19 @@ namespace App
                 IssuerSigningKey = wallesterPublicKey,
                 ValidateIssuerSigningKey = true
             };
-  
+
             SecurityToken validatedToken;
             var handler = new JwtSecurityTokenHandler();
             var claimsPrincipal = handler.ValidateToken(token, tokenValidationParameters, out validatedToken);
 
             var rbh = claimsPrincipal.FindFirst("rbh");
-            if (rbh == null) {
+            if (rbh == null)
+            {
                 throw new ApplicationException("missing response body hash");
             }
 
-            if (rbh.Value != responseBodyHash) {
+            if (rbh.Value != responseBodyHash)
+            {
                 throw new ApplicationException("invalid response body hash: " + rbh.Value);
             }
 
@@ -158,7 +160,7 @@ namespace App
 
             var notBefore = DateTime.UtcNow;
             var expires = DateTime.UtcNow.AddMinutes(1);
-            var token = new JwtSecurityToken(_issuer, _audience, claims, notBefore, expires, signingCredentials);            
+            var token = new JwtSecurityToken(_issuer, _audience, claims, notBefore, expires, signingCredentials);
 
             var handler = new JwtSecurityTokenHandler();
             return handler.WriteToken(token);
