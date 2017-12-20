@@ -33,7 +33,7 @@ public class App {
     private static final String audience = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
 
     // Replace this with actual Wallester API URL
-    private static final String apiURL = "http://xxx.wallester.eu/api/v1/test/ping";
+    private static final String apiURL = "http://xxx.wallester.eu/v1/test/ping";
     
     public static void main(String[] args) {
         try {
@@ -96,7 +96,7 @@ public class App {
 
         URL url = new URL(apiURL);
 
-        HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         connection.setRequestMethod("POST");
         connection.setDoInput(true);
         connection.setDoOutput(true);
