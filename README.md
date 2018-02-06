@@ -8,6 +8,8 @@ For debugging JWT requests you can use https://jwt.io/#debugger
 
 To choose a library for JWT please see https://jwt.io
 
+Notice that the JWT tokens are case sensitive.
+
 
 ## Create keys for signing and verifying JWT requests
 
