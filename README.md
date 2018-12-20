@@ -24,7 +24,7 @@ Send your public key (example_public) to Wallester and you will receive
 - Wallester certificate containing the public key
 - Wallester audience ID string
 - your issuer ID string
-- allowed maximum token expiration amount
+- allowed maximum token expiration time
 
 Use the received information in the following steps.
 
@@ -36,7 +36,7 @@ create a JWT token, and set the following fields:
 
 - iss: your issuer ID string
 - aud: Wallester audience ID string
-- exp: set it into the future, for example current UTC time + allowed by Wallester maximum expiration amount
+- exp: set it into the future, for example current UTC time + allowed by Wallester maximum expiration time
 - sub: set it to "api-request"
 - rbh: request body hash (see below how to calculate it)
 
