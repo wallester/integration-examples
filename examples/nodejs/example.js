@@ -67,7 +67,6 @@ function createToken(privateKey, requestBody) {
     var payload = {
         iss: issuer,
         aud: audience,
-        iat: Math.floor((Date.now() / 1000) - 30),
         sub: subject,
         rbh: calculateHash(requestBody)
     };

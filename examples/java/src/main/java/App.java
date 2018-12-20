@@ -70,8 +70,6 @@ public class App {
 
         TimeZone utc = TimeZone.getTimeZone("UTC");
 
-        Calendar issuedAt = Calendar.getInstance(utc);
-
         Calendar expires = Calendar.getInstance(utc);
         expires.roll(Calendar.MINUTE, 1);
 
@@ -79,7 +77,6 @@ public class App {
             .setClaims(claims)
             .setIssuer(issuer)
             .setAudience(audience)
-            .setIssuedAt(issuedAt.getTime())
             .setExpiration(expires.getTime())
             .setSubject("api-request")
             .signWith(SignatureAlgorithm.RS256, privateKey)

@@ -35,7 +35,6 @@ create a JWT token, and set the following fields:
 
 - iss: your issuer ID string
 - aud: Wallester audience ID string
-- iat: set it to current UTC time
 - exp: set it into the future, for example current UTC time + 1 minute
 - sub: set it to "api-request"
 - rbh: request body hash (see below how to calculate it)
