@@ -24,6 +24,7 @@ Send your public key (example_public) to Wallester and you will receive
 - Wallester certificate containing the public key
 - Wallester audience ID string
 - your issuer ID string
+- allowed maximum token expiration amount
 
 Use the received information in the following steps.
 
