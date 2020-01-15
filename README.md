@@ -60,6 +60,19 @@ token is a valid hash of the response body (see below how to calculate it).
 
 	rbh = base64encode(sha256hash(body))
 
+It is important to mention that SHA256 hash of request body should be a binary representation and not the hex output.
+
+Below is an example of a request body for the following message, used for GET /v1/test/ping request.
+
+    {"message":"ping"}
+ 
+Correct request body hash for the following message will be
+
+    CupX09Xw/WUiC8YWsyJl9RUgAtbY9NmVc05BwQGXkzc=
+
+Should you use non binary hash representation, you will likely to get something like this. 
+
+    MGFlYTU3ZDNkNWYwZmQ2NTIyMGJjNjE2YjMyMjY1ZjUxNTIwMDJkNmQ4ZjRkOTk1NzM0ZTQxYzEwMTk3OTMzNw==
 
 ## Example Java source code
 
