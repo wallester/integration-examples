@@ -37,8 +37,8 @@ public class App {
     
     public static void main(String[] args) {
         try {
-            PrivateKey privateKey = readPrivateKey("../../keys/example_private.pkcs8");
-            PublicKey wallesterPublicKey = readPublicKey("../../keys/example_wallester_public.pkcs8");
+            PrivateKey privateKey = readPrivateKey(System.getProperty("user.dir") + "/keys/example_private.pkcs8");
+            PublicKey wallesterPublicKey = readPublicKey(System.getProperty("user.dir") + "/keys/example_wallester_public.pkcs8");
 
             // Replace with actual JSON payload
             PingRequest request = new PingRequest();

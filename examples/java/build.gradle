@@ -23,12 +23,12 @@ repositories {
 
 dependencies {
     // This dependency is found on compile classpath of this component and consumers.
-    compile 'com.google.guava:guava:22.0'
-    compile 'io.jsonwebtoken:jjwt:0.9.0'
-    compile 'com.google.code.gson:gson:2.8.2'
+    implementation 'com.google.guava:guava:22.0'
+    implementation 'io.jsonwebtoken:jjwt:0.9.0'
+    implementation 'com.google.code.gson:gson:2.8.2'
 
-    // Use JUnit test framework
-    testCompile 'junit:junit:4.12'
+    implementation "jakarta.xml.bind:jakarta.xml.bind-api:2.3.2"
+    implementation "org.glassfish.jaxb:jaxb-runtime:2.3.2"
 }
 
 // Define the main class for the application
