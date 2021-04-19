@@ -22,11 +22,11 @@ import (
 
 const (
 	// Replace with actual Wallester API.
-	pingURL = "https://xxx.wallester.eu/v1/test/ping"
+	pingURL = "https://api-sandbox.wallester.eu/v1/test/ping"
 	// Replace with the actual audience ID you've got from Wallester.
-	audienceID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+	audienceID = "da2b9d46-de76-498e-8746-471e8dd3d120"
 	// Replace with the actual issuer ID you've got from Wallester.
-	issuerID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+	issuerID = "75fb6c0e-3c45-4208-b579-5faa2145b404"
 	subject  = "api-request"
 )
 
@@ -40,14 +40,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	tokenStr, tok, claims, hash, body, err := createToken(requestBytes)
+	signedToken, token, claims, hash, body, err := createToken(requestBytes)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	response := doRequest(requestBytes, tokenStr)
+	response := doRequest(requestBytes, signedToken)
 
-	if err := verifyResponse(body, response, tok, claims, hash); err != nil {
+	if err := verifyToken(body, response, token, claims, hash, signedToken); err != nil {
 		log.Fatal(err)
 	}
 
@@ -169,13 +169,10 @@ func doRequest(body []byte, token string) model.PingResponse {
 	return pingResponse
 }
 
-func verifyResponse(body []byte, response model.PingResponse, token *jwt.Token, claims model.CustomClaims, hash string) error {
+func verifyToken(body []byte, response model.PingResponse, token *jwt.Token,
+	claims model.CustomClaims, hash string, signedToken string) error {
 	if response.Message != "pong" {
 		return errors.New("invalid response message")
-	}
-
-	if token.Claims != claims {
-		return errors.New("invalid token claims")
 	}
 
 	decodedHash, err := base64.StdEncoding.DecodeString(hash)
@@ -190,6 +187,39 @@ func verifyResponse(body []byte, response model.PingResponse, token *jwt.Token, 
 
 	if err := bytes.Equal(decodedHash, bodyHash); err == false {
 		return errors.New("decoded hash must be equal to request hash")
+	}
+
+	if token.Header["alg"] == nil {
+		return errors.New("alg must be defined")
+	}
+
+	if !(*model.CustomClaims).VerifyAudience(&claims, audienceID, false) {
+		return errors.New("invalid audience ID")
+	}
+
+	if !(*model.CustomClaims).VerifyIssuer(&claims, issuerID, false) {
+		return errors.New("invalid issuer ID")
+	}
+
+	tokenParsed, err := jwt.Parse(signedToken, func(token *jwt.Token) (interface{}, error) {
+		filePath := filepath.Join("keys", "example_public")
+		file, err := os.Open(filePath)
+		if err != nil {
+			return nil, errors.Annotate(err, "failed to open file")
+		}
+
+		key, err := ioutil.ReadAll(file)
+		if err != nil {
+			return nil, errors.Annotate(err, "failed to read file")
+		}
+
+		return key, nil
+	})
+
+	if tokenParsed != nil {
+		if tokenParsed.Raw != signedToken {
+			return errors.New("tokens are not equal")
+		}
 	}
 
 	return nil
