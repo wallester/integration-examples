@@ -40,12 +40,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	tok, err := createToken(requestBytes)
+	tokenStr, tok, claims, hash, err := createToken(requestBytes)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	response := doRequest(requestBytes, tok)
+	response := doRequest(requestBytes, tokenStr)
+
+	if err := verifyResponse(response, tok, claims, hash); err != nil {
+		log.Fatal(err)
+	}
 
 	log.Print(response.Message)
 }
@@ -102,15 +106,15 @@ func createHash(body []byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(hash), nil
 }
 
-func createToken(body []byte) (string, error) {
+func createToken(body []byte) (string, *jwt.Token, model.CustomClaims, string, error) {
 	privateKey, err := getPrivateKey()
 	if err != nil {
-		return "", err
+		return "", nil, model.CustomClaims{}, "", err
 	}
 
 	hash, err := createHash(body)
 	if err != nil {
-		return "", errors.Annotate(err, "failed to create hash from body")
+		return "", nil, model.CustomClaims{}, "", errors.Annotate(err, "failed to create hash from body")
 	}
 
 	claims := model.CustomClaims{
@@ -126,10 +130,10 @@ func createToken(body []byte) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	signedToken, err := token.SignedString(privateKey)
 	if err != nil {
-		return "", errors.Annotate(err, "failed to make signed string")
+		return "", nil, model.CustomClaims{}, "", errors.Annotate(err, "failed to make signed string")
 	}
 
-	return signedToken, nil
+	return signedToken, token, claims, hash, nil
 }
 
 func doRequest(body []byte, token string) model.PingResponse {
@@ -163,4 +167,20 @@ func doRequest(body []byte, token string) model.PingResponse {
 	}
 
 	return pingResponse
+}
+
+func verifyResponse(response model.PingResponse, token *jwt.Token, claims model.CustomClaims, hash string) error {
+	if response.Message != "pong" {
+		return errors.New("invalid response message")
+	}
+
+	if token.Claims != claims {
+		return errors.New("invalid token claims")
+	}
+
+	if hash != claims.RequestBodyHash {
+		return errors.New("invalid body hash")
+	}
+
+	return nil
 }

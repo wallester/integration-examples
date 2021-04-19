@@ -2,8 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="f8012a7e-9b56-4056-84ff-07838eb3fa73" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/examples/go/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/examples/go/example.go" beforeDir="false" afterPath="$PROJECT_DIR$/examples/go/example.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
