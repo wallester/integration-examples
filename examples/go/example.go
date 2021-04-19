@@ -37,18 +37,18 @@ func main() {
 
 	requestBytes, err := json.Marshal(pingRequest)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("marshalling ping request failed: %s", err)
 	}
 
 	verificationFields, err := createToken(requestBytes)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("creating token failed: %s", err)
 	}
 
 	response := doRequest(requestBytes, verificationFields.SignedToken)
 
-	if err := verifyToken(response, verificationFields); err != nil {
-		log.Fatal(err)
+	if err := verifyToken(response, *verificationFields); err != nil {
+		log.Fatalf("verifying token failed: %s", err)
 	}
 
 	log.Print(response.Message)
@@ -58,11 +58,11 @@ func getPrivateKey() (*rsa.PrivateKey, error) {
 	filePath := filepath.Join("keys", "example_private")
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, errors.Annotate(err, "failed to open file")
+		return nil, errors.Annotate(err, "opening file failed")
 	}
 	defer func() error {
 		if err = file.Close(); err != nil {
-			return errors.Annotate(err, "failed to close file")
+			return errors.Annotate(err, "closing file failed")
 		}
 		return nil
 	}()
@@ -74,20 +74,20 @@ func getPrivateKey() (*rsa.PrivateKey, error) {
 
 	privateKeyDecoded, _ := pem.Decode(key)
 	if privateKeyDecoded == nil {
-		log.Fatal("failed to decode private key")
+		log.Fatal("decoding private key failed")
 	}
 
 	decrypted := privateKeyDecoded.Bytes
 
 	if x509.IsEncryptedPEMBlock(privateKeyDecoded) {
 		if decrypted, err = x509.DecryptPEMBlock(privateKeyDecoded, []byte("")); err != nil {
-			return nil, errors.Annotate(err, "failed to decrypt decoded private key")
+			return nil, errors.Annotate(err, "decrypting decoded private key failed")
 		}
 	}
 
 	parsedKey, err := x509.ParsePKCS1PrivateKey(decrypted)
 	if err != nil {
-		return nil, errors.Annotate(err, "failed to parse decrypted private key")
+		return nil, errors.Annotate(err, "parsing decrypted private key failed")
 	}
 
 	return parsedKey, nil
@@ -106,15 +106,15 @@ func createHash(body []byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(hash), nil
 }
 
-func createToken(body []byte) (model.VerificationFields, error) {
+func createToken(body []byte) (*model.VerificationFields, error) {
 	privateKey, err := getPrivateKey()
 	if err != nil {
-		return model.VerificationFields{}, errors.Annotate(err, "failed to get private key")
+		return nil, errors.Annotate(err, "getting private key failed")
 	}
 
 	hash, err := createHash(body)
 	if err != nil {
-		return model.VerificationFields{}, errors.Annotate(err, "failed to create hash from body")
+		return nil, errors.Annotate(err, "creating hash from body failed")
 	}
 
 	claims := model.CustomClaims{
@@ -130,7 +130,7 @@ func createToken(body []byte) (model.VerificationFields, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	signedToken, err := token.SignedString(privateKey)
 	if err != nil {
-		return model.VerificationFields{}, errors.Annotate(err, "failed to make signed string")
+		return nil, errors.Annotate(err, "signing string failed")
 	}
 
 	dataToVerify := model.VerificationFields{
@@ -141,13 +141,13 @@ func createToken(body []byte) (model.VerificationFields, error) {
 		SignedToken: signedToken,
 	}
 
-	return dataToVerify, nil
+	return &dataToVerify, nil
 }
 
 func doRequest(body []byte, token string) model.PingResponse {
 	request, err := http.NewRequest("POST", pingURL, bytes.NewBuffer(body))
 	if err != nil {
-		panic(err)
+		log.Fatalf("sending request to API failed: %s", err)
 	}
 
 	request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
@@ -159,37 +159,33 @@ func doRequest(body []byte, token string) model.PingResponse {
 
 	response, err := client.Do(request)
 	if err != nil {
-		log.Fatal("failed to send http request")
+		log.Fatalf("sending http request failed: %s", err)
 	}
 
 	defer response.Body.Close()
 
 	b, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		log.Fatal("failed to read response body")
+		log.Fatalf("reading response body failed: %s", err)
 	}
 
 	var pingResponse model.PingResponse
 	if err := json.Unmarshal(b, &pingResponse); err != nil {
-		panic(err)
+		log.Fatalf("unmarshalling response failed: %s", err)
 	}
 
 	return pingResponse
 }
 
 func verifyToken(response model.PingResponse, verificationFields model.VerificationFields) error {
-	if response.Message != "pong" {
-		return errors.New("invalid response message")
-	}
-
 	decodedHash, err := base64.StdEncoding.DecodeString(verificationFields.Hash)
 	if err != nil {
-		return errors.Annotate(err, "failed to decode hash")
+		return errors.Annotate(err, "decoding hash failed")
 	}
 
 	bodyHash, err := model.Sha256hash(verificationFields.Body)
 	if err != nil {
-		return errors.Annotate(err, "failed to create body hash")
+		return errors.Annotate(err, "creating body hash failed")
 	}
 
 	if err := bytes.Equal(decodedHash, bodyHash); err == false {
@@ -200,11 +196,15 @@ func verifyToken(response model.PingResponse, verificationFields model.Verificat
 		return errors.New("alg must be defined")
 	}
 
-	if !(verificationFields.Claims).VerifyAudience(audienceID, false) {
+	if verificationFields.Token.Header["alg"] != "RS256" {
+		return errors.New("wrong signing algorithm")
+	}
+
+	if verificationFields.Claims.Audience != audienceID {
 		return errors.New("invalid audience ID")
 	}
 
-	if !(verificationFields.Claims).VerifyIssuer(issuerID, false) {
+	if verificationFields.Claims.Issuer != issuerID {
 		return errors.New("invalid issuer ID")
 	}
 
@@ -212,12 +212,12 @@ func verifyToken(response model.PingResponse, verificationFields model.Verificat
 		filePath := filepath.Join("keys", "example_public")
 		file, err := os.Open(filePath)
 		if err != nil {
-			return nil, errors.Annotate(err, "failed to open file")
+			return nil, errors.Annotate(err, "opening file failed")
 		}
 
 		key, err := ioutil.ReadAll(file)
 		if err != nil {
-			return nil, errors.Annotate(err, "failed to read file")
+			return nil, errors.Annotate(err, "reading file failed")
 		}
 
 		return key, nil
@@ -227,6 +227,10 @@ func verifyToken(response model.PingResponse, verificationFields model.Verificat
 		if parsedToken.Raw != verificationFields.SignedToken {
 			return errors.New("tokens are not equal")
 		}
+	}
+
+	if response.Message != "pong" {
+		return errors.New("invalid response message")
 	}
 
 	return nil
