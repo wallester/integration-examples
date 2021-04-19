@@ -69,7 +69,7 @@ func getPrivateKey() (*rsa.PrivateKey, error) {
 
 	key, err := ioutil.ReadAll(file)
 	if err != nil {
-		return nil, errors.Annotate(err, "failed to read file")
+		return nil, errors.Annotate(err, "reading file failed")
 	}
 
 	privateKeyDecoded, _ := pem.Decode(key)
