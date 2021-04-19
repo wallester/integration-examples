@@ -208,6 +208,10 @@ func verifyToken(response model.PingResponse, verificationFields model.Verificat
 		return errors.New("invalid issuer ID")
 	}
 
+	if verificationFields.Claims.Subject != subject {
+		return errors.New("invalid subject")
+	}
+
 	parsedToken, err := jwt.Parse(verificationFields.SignedToken, func(token *jwt.Token) (interface{}, error) {
 		filePath := filepath.Join("keys", "example_public")
 		file, err := os.Open(filePath)
