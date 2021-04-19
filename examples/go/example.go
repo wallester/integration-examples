@@ -40,14 +40,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	tokenStr, tok, claims, hash, err := createToken(requestBytes)
+	tokenStr, tok, claims, hash, body, err := createToken(requestBytes)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	response := doRequest(requestBytes, tokenStr)
 
-	if err := verifyResponse(response, tok, claims, hash); err != nil {
+	if err := verifyResponse(body, response, tok, claims, hash); err != nil {
 		log.Fatal(err)
 	}
 
@@ -106,15 +106,15 @@ func createHash(body []byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(hash), nil
 }
 
-func createToken(body []byte) (string, *jwt.Token, model.CustomClaims, string, error) {
+func createToken(body []byte) (string, *jwt.Token, model.CustomClaims, string, []byte, error) {
 	privateKey, err := getPrivateKey()
 	if err != nil {
-		return "", nil, model.CustomClaims{}, "", err
+		return "", nil, model.CustomClaims{}, "", nil, err
 	}
 
 	hash, err := createHash(body)
 	if err != nil {
-		return "", nil, model.CustomClaims{}, "", errors.Annotate(err, "failed to create hash from body")
+		return "", nil, model.CustomClaims{}, "", nil, errors.Annotate(err, "failed to create hash from body")
 	}
 
 	claims := model.CustomClaims{
@@ -130,10 +130,10 @@ func createToken(body []byte) (string, *jwt.Token, model.CustomClaims, string, e
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	signedToken, err := token.SignedString(privateKey)
 	if err != nil {
-		return "", nil, model.CustomClaims{}, "", errors.Annotate(err, "failed to make signed string")
+		return "", nil, model.CustomClaims{}, "", nil, errors.Annotate(err, "failed to make signed string")
 	}
 
-	return signedToken, token, claims, hash, nil
+	return signedToken, token, claims, hash, body, nil
 }
 
 func doRequest(body []byte, token string) model.PingResponse {
@@ -169,7 +169,7 @@ func doRequest(body []byte, token string) model.PingResponse {
 	return pingResponse
 }
 
-func verifyResponse(response model.PingResponse, token *jwt.Token, claims model.CustomClaims, hash string) error {
+func verifyResponse(body []byte, response model.PingResponse, token *jwt.Token, claims model.CustomClaims, hash string) error {
 	if response.Message != "pong" {
 		return errors.New("invalid response message")
 	}
@@ -178,8 +178,13 @@ func verifyResponse(response model.PingResponse, token *jwt.Token, claims model.
 		return errors.New("invalid token claims")
 	}
 
-	if hash != claims.RequestBodyHash {
-		return errors.New("invalid body hash")
+	decodedBody, err := jwt.DecodeSegment(hash)
+	if err != nil {
+		return errors.Annotate(err, "failed to decode hash")
+	}
+
+	if err := bytes.Compare(decodedBody, body); err != 0 {
+		return errors.New("body and decoded body must be equal")
 	}
 
 	return nil
