@@ -178,13 +178,18 @@ func verifyResponse(body []byte, response model.PingResponse, token *jwt.Token, 
 		return errors.New("invalid token claims")
 	}
 
-	decodedBody, err := jwt.DecodeSegment(hash)
+	decodedHash, err := base64.StdEncoding.DecodeString(hash)
 	if err != nil {
 		return errors.Annotate(err, "failed to decode hash")
 	}
 
-	if err := bytes.Compare(decodedBody, body); err != 0 {
-		return errors.New("body and decoded body must be equal")
+	bodyHash, err := model.Sha256hash(body)
+	if err != nil {
+		return errors.Annotate(err, "failed to create body hash")
+	}
+
+	if err := bytes.Equal(decodedHash, bodyHash); err == false {
+		return errors.New("decoded hash must be equal to request hash")
 	}
 
 	return nil
