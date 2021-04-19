@@ -40,14 +40,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	signedToken, token, claims, hash, body, err := createToken(requestBytes)
+	verificationFields, err := createToken(requestBytes)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	response := doRequest(requestBytes, signedToken)
+	response := doRequest(requestBytes, verificationFields.SignedToken)
 
-	if err := verifyToken(body, response, token, claims, hash, signedToken); err != nil {
+	if err := verifyToken(response, verificationFields); err != nil {
 		log.Fatal(err)
 	}
 
@@ -106,15 +106,15 @@ func createHash(body []byte) (string, error) {
 	return base64.StdEncoding.EncodeToString(hash), nil
 }
 
-func createToken(body []byte) (string, *jwt.Token, model.CustomClaims, string, []byte, error) {
+func createToken(body []byte) (model.VerificationFields, error) {
 	privateKey, err := getPrivateKey()
 	if err != nil {
-		return "", nil, model.CustomClaims{}, "", nil, err
+		return model.VerificationFields{}, errors.Annotate(err, "failed to get private key")
 	}
 
 	hash, err := createHash(body)
 	if err != nil {
-		return "", nil, model.CustomClaims{}, "", nil, errors.Annotate(err, "failed to create hash from body")
+		return model.VerificationFields{}, errors.Annotate(err, "failed to create hash from body")
 	}
 
 	claims := model.CustomClaims{
@@ -130,10 +130,18 @@ func createToken(body []byte) (string, *jwt.Token, model.CustomClaims, string, [
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	signedToken, err := token.SignedString(privateKey)
 	if err != nil {
-		return "", nil, model.CustomClaims{}, "", nil, errors.Annotate(err, "failed to make signed string")
+		return model.VerificationFields{}, errors.Annotate(err, "failed to make signed string")
 	}
 
-	return signedToken, token, claims, hash, body, nil
+	dataToVerify := model.VerificationFields{
+		Body:        body,
+		Token:       token,
+		Claims:      claims,
+		Hash:        hash,
+		SignedToken: signedToken,
+	}
+
+	return dataToVerify, nil
 }
 
 func doRequest(body []byte, token string) model.PingResponse {
@@ -169,18 +177,17 @@ func doRequest(body []byte, token string) model.PingResponse {
 	return pingResponse
 }
 
-func verifyToken(body []byte, response model.PingResponse, token *jwt.Token,
-	claims model.CustomClaims, hash string, signedToken string) error {
+func verifyToken(response model.PingResponse, verificationFields model.VerificationFields) error {
 	if response.Message != "pong" {
 		return errors.New("invalid response message")
 	}
 
-	decodedHash, err := base64.StdEncoding.DecodeString(hash)
+	decodedHash, err := base64.StdEncoding.DecodeString(verificationFields.Hash)
 	if err != nil {
 		return errors.Annotate(err, "failed to decode hash")
 	}
 
-	bodyHash, err := model.Sha256hash(body)
+	bodyHash, err := model.Sha256hash(verificationFields.Body)
 	if err != nil {
 		return errors.Annotate(err, "failed to create body hash")
 	}
@@ -189,19 +196,19 @@ func verifyToken(body []byte, response model.PingResponse, token *jwt.Token,
 		return errors.New("decoded hash must be equal to request hash")
 	}
 
-	if token.Header["alg"] == nil {
+	if verificationFields.Token.Header["alg"] == nil {
 		return errors.New("alg must be defined")
 	}
 
-	if !(*model.CustomClaims).VerifyAudience(&claims, audienceID, false) {
+	if !(verificationFields.Claims).VerifyAudience(audienceID, false) {
 		return errors.New("invalid audience ID")
 	}
 
-	if !(*model.CustomClaims).VerifyIssuer(&claims, issuerID, false) {
+	if !(verificationFields.Claims).VerifyIssuer(issuerID, false) {
 		return errors.New("invalid issuer ID")
 	}
 
-	tokenParsed, err := jwt.Parse(signedToken, func(token *jwt.Token) (interface{}, error) {
+	parsedToken, err := jwt.Parse(verificationFields.SignedToken, func(token *jwt.Token) (interface{}, error) {
 		filePath := filepath.Join("keys", "example_public")
 		file, err := os.Open(filePath)
 		if err != nil {
@@ -216,8 +223,8 @@ func verifyToken(body []byte, response model.PingResponse, token *jwt.Token,
 		return key, nil
 	})
 
-	if tokenParsed != nil {
-		if tokenParsed.Raw != signedToken {
+	if parsedToken != nil {
+		if parsedToken.Raw != verificationFields.SignedToken {
 			return errors.New("tokens are not equal")
 		}
 	}

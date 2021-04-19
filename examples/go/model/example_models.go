@@ -7,6 +7,14 @@ import (
 	"github.com/juju/errors"
 )
 
+type VerificationFields struct {
+	Body        []byte
+	Token       *jwt.Token
+	Claims      CustomClaims
+	Hash        string
+	SignedToken string
+}
+
 type PingRequest struct {
 	Message string `json:"message"`
 }
