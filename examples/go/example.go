@@ -60,10 +60,12 @@ func getPrivateKey() (*rsa.PrivateKey, error) {
 	if err != nil {
 		return nil, errors.Annotate(err, "opening file failed")
 	}
+	
 	defer func() error {
 		if err = file.Close(); err != nil {
 			return errors.Annotate(err, "closing file failed")
 		}
+		
 		return nil
 	}()
 
