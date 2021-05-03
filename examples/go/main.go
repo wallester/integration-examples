@@ -22,11 +22,7 @@ import (
 )
 
 func main() {
-	pingRequest := model.PingRequest{
-		Message: "ping",
-	}
-
-	requestBytes, err := json.Marshal(pingRequest)
+	requestBytes, err := json.Marshal(model.NewPingRequest())
 	if err != nil {
 		log.Fatal(errors.Annotate(err, "marshalling ping request failed"))
 	}
@@ -133,7 +129,7 @@ func createToken(body []byte) (*model.VerificationFields, error) {
 }
 
 func doRequest(body []byte, token string) (*model.PingResponse, error) {
-	request, err := http.NewRequest("POST", pingURL, bytes.NewBuffer(body))
+	request, err := http.NewRequest(http.MethodPost, pingURL, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, errors.Annotate(err, "creating new request failed")
 	}
