@@ -1,0 +1,10 @@
+# github.com/dgrijalva/jwt-go v3.2.0+incompatible
+## explicit
+github.com/dgrijalva/jwt-go
+# github.com/juju/errors v0.0.0-20200330140219-3fe23663418f
+## explicit
+github.com/juju/errors
+# github.com/juju/testing v0.0.0-20210324180055-18c50b0c2098
+## explicit
+# golang.org/x/oauth2 v0.0.0-20210427180440-81ed05c6b58c
+## explicit

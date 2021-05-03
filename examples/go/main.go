@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -20,16 +21,6 @@ import (
 	"github.com/wallester/integration-examples/examples/go/model"
 )
 
-const (
-	// Replace with actual Wallester API.
-	pingURL = "https://api-sandbox.wallester.eu/v1/test/ping"
-	// Replace with the actual audience ID you've got from Wallester.
-	audienceID = "da2b9d46-de76-498e-8746-471e8dd3d120"
-	// Replace with the actual issuer ID you've got from Wallester.
-	issuerID = "75fb6c0e-3c45-4208-b579-5faa2145b404"
-	subject  = "api-request"
-)
-
 func main() {
 	pingRequest := model.PingRequest{
 		Message: "ping",
@@ -37,44 +28,41 @@ func main() {
 
 	requestBytes, err := json.Marshal(pingRequest)
 	if err != nil {
-		log.Fatalf("marshalling ping request failed: %s", err)
+		log.Fatal(errors.Annotate(err, "marshalling ping request failed"))
 	}
 
 	verificationFields, err := createToken(requestBytes)
 	if err != nil {
-		log.Fatalf("creating token failed: %s", err)
+		log.Fatal(errors.Annotate(err, "creating token failed"))
 	}
 
-	response := doRequest(requestBytes, verificationFields.SignedToken)
-
-	if err := verifyToken(response, *verificationFields); err != nil {
-		log.Fatalf("verifying token failed: %s", err)
+	response, err := doRequest(requestBytes, verificationFields.SignedToken)
+	if err != nil {
+		log.Fatal(errors.Annotate(err,"doing request failed"))
 	}
 
-	log.Print(response.Message)
+	if err := verifyToken(*response, *verificationFields); err != nil {
+		log.Fatal(errors.Annotate(err, "verifying token failed"))
+	}
+
+	log.Println(response.Message)
 }
 
 func getPrivateKey() (*rsa.PrivateKey, error) {
 	filePath := filepath.Join("keys", "example_private")
-	file, err := os.Open(filePath)
+	file, err := os.Open(filepath.Clean(filePath))
 	if err != nil {
 		return nil, errors.Annotate(err, "opening file failed")
 	}
 	
-	defer func() error {
-		if err = file.Close(); err != nil {
-			return errors.Annotate(err, "closing file failed")
-		}
-		
-		return nil
-	}()
+	defer file.Close()
 
-	key, err := ioutil.ReadAll(file)
+	b, err := ioutil.ReadAll(file)
 	if err != nil {
 		return nil, errors.Annotate(err, "reading file failed")
 	}
 
-	privateKeyDecoded, _ := pem.Decode(key)
+	privateKeyDecoded, _ := pem.Decode(b)
 	if privateKeyDecoded == nil {
 		log.Fatal("decoding private key failed")
 	}
@@ -83,7 +71,7 @@ func getPrivateKey() (*rsa.PrivateKey, error) {
 
 	if x509.IsEncryptedPEMBlock(privateKeyDecoded) {
 		if decrypted, err = x509.DecryptPEMBlock(privateKeyDecoded, []byte("")); err != nil {
-			return nil, errors.Annotate(err, "decrypting decoded private key failed")
+			return nil, errors.Annotate(err, "decrypting PEM private key failed")
 		}
 	}
 
@@ -95,12 +83,12 @@ func getPrivateKey() (*rsa.PrivateKey, error) {
 	return parsedKey, nil
 }
 
-func createHash(body []byte) (string, error) {
+func hash(body []byte) (string, error) {
 	if len(body) == 0 {
-		return "", errors.New("length of body must be greater than zero")
+		return "", nil
 	}
 
-	hash, err := model.Sha256hash(body)
+	hash, err := sha256hash(body)
 	if err != nil {
 		return "", errors.Annotate(err, "creating sha256 hash failed")
 	}
@@ -114,9 +102,9 @@ func createToken(body []byte) (*model.VerificationFields, error) {
 		return nil, errors.Annotate(err, "getting private key failed")
 	}
 
-	hash, err := createHash(body)
+	hash, err := hash(body)
 	if err != nil {
-		return nil, errors.Annotate(err, "creating hash from body failed")
+		return nil, errors.Annotate(err, "hashing body failed")
 	}
 
 	claims := model.CustomClaims{
@@ -135,21 +123,19 @@ func createToken(body []byte) (*model.VerificationFields, error) {
 		return nil, errors.Annotate(err, "signing string failed")
 	}
 
-	dataToVerify := model.VerificationFields{
+	return &model.VerificationFields{
 		Body:        body,
 		Token:       token,
 		Claims:      claims,
 		Hash:        hash,
 		SignedToken: signedToken,
-	}
-
-	return &dataToVerify, nil
+	}, nil
 }
 
-func doRequest(body []byte, token string) model.PingResponse {
+func doRequest(body []byte, token string) (*model.PingResponse, error) {
 	request, err := http.NewRequest("POST", pingURL, bytes.NewBuffer(body))
 	if err != nil {
-		log.Fatalf("sending request to API failed: %s", err)
+		return nil, errors.Annotate(err, "creating new request failed")
 	}
 
 	request.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
@@ -161,22 +147,22 @@ func doRequest(body []byte, token string) model.PingResponse {
 
 	response, err := client.Do(request)
 	if err != nil {
-		log.Fatalf("sending http request failed: %s", err)
+		return nil, errors.Annotate(err, "doing request failed")
 	}
 
 	defer response.Body.Close()
 
 	b, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		log.Fatalf("reading response body failed: %s", err)
+		return nil, errors.Annotate(err, "reading body failed")
 	}
 
 	var pingResponse model.PingResponse
 	if err := json.Unmarshal(b, &pingResponse); err != nil {
-		log.Fatalf("unmarshalling response failed: %s", err)
+		return nil, errors.Annotate(err, "unmarshalling response failed")
 	}
 
-	return pingResponse
+	return &pingResponse, nil
 }
 
 func verifyToken(response model.PingResponse, verificationFields model.VerificationFields) error {
@@ -185,13 +171,13 @@ func verifyToken(response model.PingResponse, verificationFields model.Verificat
 		return errors.Annotate(err, "decoding hash failed")
 	}
 
-	bodyHash, err := model.Sha256hash(verificationFields.Body)
+	bodyHash, err := sha256hash(verificationFields.Body)
 	if err != nil {
 		return errors.Annotate(err, "creating body hash failed")
 	}
 
-	if err := bytes.Equal(decodedHash, bodyHash); err == false {
-		return errors.New("decoded hash must be equal to request hash")
+	if eq := bytes.Equal(decodedHash, bodyHash); !eq {
+		return errors.New("decoded hash must be equal to request body hash")
 	}
 
 	if verificationFields.Token.Header["alg"] == nil {
@@ -221,6 +207,8 @@ func verifyToken(response model.PingResponse, verificationFields model.Verificat
 			return nil, errors.Annotate(err, "opening file failed")
 		}
 
+		defer file.Close()
+
 		key, err := ioutil.ReadAll(file)
 		if err != nil {
 			return nil, errors.Annotate(err, "reading file failed")
@@ -228,16 +216,39 @@ func verifyToken(response model.PingResponse, verificationFields model.Verificat
 
 		return key, nil
 	})
+	if err != nil {
+		return errors.Annotate(err, "parsing token failed")
+	}
 
-	if parsedToken != nil {
-		if parsedToken.Raw != verificationFields.SignedToken {
-			return errors.New("tokens are not equal")
-		}
+	if parsedToken.Raw != verificationFields.SignedToken {
+		return errors.New("tokens are not equal")
 	}
 
 	if response.Message != "pong" {
-		return errors.New("invalid response message")
+		return errors.Errorf("Invalid response message, expected 'pong', got '%s'", response.Message)
 	}
 
 	return nil
 }
+
+// private
+
+func sha256hash(body []byte) ([]byte, error) {
+	hash := sha256.New()
+	if _, err := hash.Write(body); err != nil {
+		return nil, errors.Annotate(err, "writing sha256 hash failed")
+	}
+
+	return hash.Sum(nil), nil
+}
+
+const (
+	// Replace with actual Wallester API.
+	pingURL = "http://xxx.wallester.eu/v1/test/ping"
+	// Replace with the actual audience ID you've got from Wallester.
+	audienceID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+	// Replace with the actual issuer ID you've got from Wallester.
+	issuerID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+	// API subject
+	subject  = "api-request"
+)
