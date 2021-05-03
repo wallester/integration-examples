@@ -60,17 +60,9 @@ func readPrivateKey() (*rsa.PrivateKey, error) {
 		return nil, errors.Annotate(err, "reading file failed")
 	}
 
-	privateKeyDecoded, _ := pem.Decode(b)
-	if privateKeyDecoded == nil {
-		log.Fatal("decoding private key failed")
-	}
-
-	decrypted := privateKeyDecoded.Bytes
-
-	if x509.IsEncryptedPEMBlock(privateKeyDecoded) {
-		if decrypted, err = x509.DecryptPEMBlock(privateKeyDecoded, []byte("")); err != nil {
-			return nil, errors.Annotate(err, "decrypting PEM private key failed")
-		}
+	decrypted, err := decodePEMBlock(b)
+	if err != nil {
+		return nil, errors.Annotate(err, "decoding PEM block failed")
 	}
 
 	parsedKey, err := x509.ParsePKCS1PrivateKey(decrypted)
@@ -204,17 +196,9 @@ func verifyResponse(result *result) (*model.PingResponse, error) {
 			return nil, errors.Annotate(err, "reading file failed")
 		}
 
-		publicKeyDecoded, _ := pem.Decode(b)
-		if publicKeyDecoded == nil {
-			return nil, errors.New("decoding public key failed")
-		}
-
-		decrypted := publicKeyDecoded.Bytes
-
-		if x509.IsEncryptedPEMBlock(publicKeyDecoded) {
-			if decrypted, err = x509.DecryptPEMBlock(publicKeyDecoded, []byte("")); err != nil {
-				return nil, errors.Annotate(err, "decrypting PEM public key failed")
-			}
+		decrypted, err := decodePEMBlock(b)
+		if err != nil {
+			return nil, errors.Annotate(err, "decoding PEM block failed")
 		}
 
 		parsedKey, err := x509.ParsePKIXPublicKey(decrypted)
@@ -259,6 +243,26 @@ func sha256hash(body []byte) ([]byte, error) {
 	}
 
 	return hash.Sum(nil), nil
+}
+
+func decodePEMBlock(block []byte) ([]byte, error) {
+	decodedKey, _ := pem.Decode(block)
+	if decodedKey == nil {
+		log.Fatal("decoding block failed")
+	}
+
+	var (
+		decrypted = decodedKey.Bytes
+		err       error
+	)
+
+	if x509.IsEncryptedPEMBlock(decodedKey) {
+		if decrypted, err = x509.DecryptPEMBlock(decodedKey, []byte("")); err != nil {
+			return nil, errors.Annotate(err, "decrypting PEM key failed")
+		}
+	}
+
+	return decrypted, nil
 }
 
 const (
