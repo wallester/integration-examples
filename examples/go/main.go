@@ -45,7 +45,7 @@ func main() {
 }
 
 func getPrivateKey() (*rsa.PrivateKey, error) {
-	filePath := filepath.Join("keys", "example_private")
+	filePath := filepath.Join("..", "..", "keys", "example_private")
 	file, err := os.Open(filepath.Clean(filePath))
 	if err != nil {
 		return nil, errors.Annotate(err, "opening file failed")
@@ -106,7 +106,7 @@ func createToken(body []byte) (*model.VerificationFields, error) {
 	claims := model.CustomClaims{
 		StandardClaims: jwt.StandardClaims{
 			Audience:  audienceID,
-			ExpiresAt: time.Now().UTC().Add(15 * time.Second).Unix(),
+			ExpiresAt: time.Now().UTC().Add(maxExpirationTime).Unix(),
 			Issuer:    issuerID,
 			Subject:   subject,
 		},
@@ -180,7 +180,7 @@ func verifyToken(response model.PingResponse, verificationFields model.Verificat
 		return errors.New("alg must be defined")
 	}
 
-	if verificationFields.Token.Header["alg"] != "RS256" {
+	if verificationFields.Token.Header["alg"] != jwt.SigningMethodRS256.Alg() {
 		return errors.New("wrong signing algorithm")
 	}
 
@@ -197,8 +197,8 @@ func verifyToken(response model.PingResponse, verificationFields model.Verificat
 	}
 
 	parsedToken, err := jwt.Parse(verificationFields.SignedToken, func(token *jwt.Token) (interface{}, error) {
-		filePath := filepath.Join("keys", "example_public")
-		file, err := os.Open(filePath)
+		filePath := filepath.Join("..", "..", "keys", "example_public")
+		file, err := os.Open(filepath.Clean(filePath))
 		if err != nil {
 			return nil, errors.Annotate(err, "opening file failed")
 		}
@@ -247,4 +247,6 @@ const (
 	issuerID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 	// API subject
 	subject  = "api-request"
+	// Maximum JWT token expiration time
+	maxExpirationTime = 60 * time.Second
 )
