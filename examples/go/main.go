@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -27,30 +28,31 @@ func main() {
 		log.Fatal(errors.Annotate(err, "marshalling ping request failed"))
 	}
 
-	verificationFields, err := createToken(requestBytes)
+	token, err := createToken(requestBytes)
 	if err != nil {
 		log.Fatal(errors.Annotate(err, "creating token failed"))
 	}
 
-	response, err := doRequest(requestBytes, verificationFields.SignedToken)
+	responseBytes, err := doRequest(requestBytes, token)
 	if err != nil {
-		log.Fatal(errors.Annotate(err,"doing request failed"))
+		log.Fatal(errors.Annotate(err, "doing request failed"))
 	}
 
-	if err := verifyToken(*response, *verificationFields); err != nil {
-		log.Fatal(errors.Annotate(err, "verifying token failed"))
+	response, err := verifyResponse(responseBytes)
+	if err != nil {
+		log.Fatal(errors.Annotate(err, "verifying response failed"))
 	}
 
-	log.Println(response.Message)
+	log.Printf("\033[32mSuccess:\u001B[0m %s", response.Message)
 }
 
-func getPrivateKey() (*rsa.PrivateKey, error) {
+func readPrivateKey() (*rsa.PrivateKey, error) {
 	filePath := filepath.Join("..", "..", "keys", "example_private")
 	file, err := os.Open(filepath.Clean(filePath))
 	if err != nil {
 		return nil, errors.Annotate(err, "opening file failed")
 	}
-	
+
 	defer file.Close()
 
 	b, err := ioutil.ReadAll(file)
@@ -79,28 +81,15 @@ func getPrivateKey() (*rsa.PrivateKey, error) {
 	return parsedKey, nil
 }
 
-func hash(body []byte) (string, error) {
-	if len(body) == 0 {
-		return "", nil
+func createToken(body []byte) (string, error) {
+	privateKey, err := readPrivateKey()
+	if err != nil {
+		return "", errors.Annotate(err, "getting private key failed")
 	}
 
-	hash, err := sha256hash(body)
+	hash, err := calculateRequestBodyHash(body)
 	if err != nil {
-		return "", errors.Annotate(err, "creating sha256 hash failed")
-	}
-
-	return base64.StdEncoding.EncodeToString(hash), nil
-}
-
-func createToken(body []byte) (*model.VerificationFields, error) {
-	privateKey, err := getPrivateKey()
-	if err != nil {
-		return nil, errors.Annotate(err, "getting private key failed")
-	}
-
-	hash, err := hash(body)
-	if err != nil {
-		return nil, errors.Annotate(err, "hashing body failed")
+		return "", errors.Annotate(err, "hashing body failed")
 	}
 
 	claims := model.CustomClaims{
@@ -113,22 +102,21 @@ func createToken(body []byte) (*model.VerificationFields, error) {
 		RequestBodyHash: hash,
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	signedToken, err := token.SignedString(privateKey)
+	signer := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	signedToken, err := signer.SignedString(privateKey)
 	if err != nil {
-		return nil, errors.Annotate(err, "signing string failed")
+		return "", errors.Annotate(err, "signing string failed")
 	}
 
-	return &model.VerificationFields{
-		Body:        body,
-		Token:       token,
-		Claims:      claims,
-		Hash:        hash,
-		SignedToken: signedToken,
-	}, nil
+	return signedToken, nil
 }
 
-func doRequest(body []byte, token string) (*model.PingResponse, error) {
+type result struct {
+	Token        string
+	ResponseBody []byte
+}
+
+func doRequest(body []byte, token string) (*result, error) {
 	request, err := http.NewRequest(http.MethodPost, pingURL, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, errors.Annotate(err, "creating new request failed")
@@ -148,56 +136,62 @@ func doRequest(body []byte, token string) (*model.PingResponse, error) {
 
 	defer response.Body.Close()
 
+	if response.StatusCode != 200 {
+		return nil, errors.Errorf("unexpected status code: status code=%d", response.StatusCode)
+	}
+
 	b, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, errors.Annotate(err, "reading body failed")
+		return nil, errors.Annotate(err, "reading response body failed")
 	}
 
-	var pingResponse model.PingResponse
-	if err := json.Unmarshal(b, &pingResponse); err != nil {
-		return nil, errors.Annotate(err, "unmarshalling response failed")
-	}
-
-	return &pingResponse, nil
+	return &result{
+		ResponseBody: b,
+		Token:        strings.TrimPrefix(response.Header.Get("Authorization"), "Bearer "),
+	}, nil
 }
 
-func verifyToken(response model.PingResponse, verificationFields model.VerificationFields) error {
-	decodedHash, err := base64.StdEncoding.DecodeString(verificationFields.Hash)
-	if err != nil {
-		return errors.Annotate(err, "decoding hash failed")
+func verifyResponse(result *result) (*model.PingResponse, error) {
+	parser := &jwt.Parser{
+		SkipClaimsValidation: true,
 	}
 
-	bodyHash, err := sha256hash(verificationFields.Body)
-	if err != nil {
-		return errors.Annotate(err, "creating body hash failed")
-	}
+	if _, err := parser.Parse(result.Token, func(token *jwt.Token) (interface{}, error) {
+		if token == nil {
+			return nil, errors.New("token is empty")
+		}
 
-	if eq := bytes.Equal(decodedHash, bodyHash); !eq {
-		return errors.New("decoded hash must be equal to request body hash")
-	}
+		claims := token.Claims.(jwt.MapClaims)
+		if !claims.VerifyAudience(issuerID, true) {
+			return nil, errors.New("invalid audience ID")
+		}
 
-	if verificationFields.Token.Header["alg"] == nil {
-		return errors.New("alg must be defined")
-	}
+		if !claims.VerifyIssuer(audienceID, true) {
+			return nil, errors.New("invalid issuer ID")
+		}
 
-	if verificationFields.Token.Header["alg"] != jwt.SigningMethodRS256.Alg() {
-		return errors.New("wrong signing algorithm")
-	}
+		if !claims.VerifyExpiresAt(time.Now().UTC().Unix(), true) {
+			return nil, errors.New("invalid token expiration time")
+		}
 
-	if verificationFields.Claims.Audience != audienceID {
-		return errors.New("invalid audience ID")
-	}
+		if claims["sub"] != subject {
+			return nil, errors.New("invalid subject")
+		}
 
-	if verificationFields.Claims.Issuer != issuerID {
-		return errors.New("invalid issuer ID")
-	}
+		if token.Header["alg"] == nil || token.Header["alg"] != jwt.SigningMethodRS256.Alg() {
+			return nil, errors.New("invalid token signing algorithm")
+		}
 
-	if verificationFields.Claims.Subject != subject {
-		return errors.New("invalid subject")
-	}
+		expectedRBH, err := calculateRequestBodyHash(result.ResponseBody)
+		if err != nil {
+			return nil, errors.Annotate(err, "hashing httpResponse body failed")
+		}
 
-	parsedToken, err := jwt.Parse(verificationFields.SignedToken, func(token *jwt.Token) (interface{}, error) {
-		filePath := filepath.Join("..", "..", "keys", "example_public")
+		if rbh, ok := claims["rbh"].(string); !ok || rbh != expectedRBH {
+			return nil, errors.New("invalid rbh received")
+		}
+
+		filePath := filepath.Join("..", "..", "keys", "example_wallester_public")
 		file, err := os.Open(filepath.Clean(filePath))
 		if err != nil {
 			return nil, errors.Annotate(err, "opening file failed")
@@ -205,29 +199,58 @@ func verifyToken(response model.PingResponse, verificationFields model.Verificat
 
 		defer file.Close()
 
-		key, err := ioutil.ReadAll(file)
+		b, err := ioutil.ReadAll(file)
 		if err != nil {
 			return nil, errors.Annotate(err, "reading file failed")
 		}
 
-		return key, nil
-	})
-	if err != nil {
-		return errors.Annotate(err, "parsing token failed")
+		publicKeyDecoded, _ := pem.Decode(b)
+		if publicKeyDecoded == nil {
+			return nil, errors.New("decoding public key failed")
+		}
+
+		decrypted := publicKeyDecoded.Bytes
+
+		if x509.IsEncryptedPEMBlock(publicKeyDecoded) {
+			if decrypted, err = x509.DecryptPEMBlock(publicKeyDecoded, []byte("")); err != nil {
+				return nil, errors.Annotate(err, "decrypting PEM public key failed")
+			}
+		}
+
+		parsedKey, err := x509.ParsePKIXPublicKey(decrypted)
+		if err != nil {
+			return nil, errors.Annotate(err, "parsing decrypted public key failed")
+		}
+
+		return parsedKey, nil
+	}); err != nil {
+		return nil, errors.Annotate(err, "parsing token failed")
 	}
 
-	if parsedToken.Raw != verificationFields.SignedToken {
-		return errors.New("tokens are not equal")
+	var response model.PingResponse
+	if err := json.Unmarshal(result.ResponseBody, &response); err != nil {
+		return nil, errors.Annotate(err, "unmarshalling body failed")
 	}
 
-	if response.Message != "pong" {
-		return errors.Errorf("Invalid response message, expected 'pong', got '%s'", response.Message)
+	if !response.Verify() {
+		return nil, errors.Errorf("Invalid response message, expected 'pong', got '%s'", response.Message)
 	}
 
-	return nil
+	return &response, nil
 }
 
-// private
+func calculateRequestBodyHash(body []byte) (string, error) {
+	if len(body) == 0 {
+		return "", nil
+	}
+
+	hash, err := sha256hash(body)
+	if err != nil {
+		return "", errors.Annotate(err, "creating sha256 hash failed")
+	}
+
+	return base64.StdEncoding.EncodeToString(hash), nil
+}
 
 func sha256hash(body []byte) ([]byte, error) {
 	hash := sha256.New()
@@ -240,13 +263,13 @@ func sha256hash(body []byte) ([]byte, error) {
 
 const (
 	// Replace with actual Wallester API.
-	pingURL = "http://xxx.wallester.eu/v1/test/ping"
+	pingURL = "https://api-sandbox.wallester.eu/v1/test/ping"
 	// Replace with the actual audience ID you've got from Wallester.
-	audienceID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+	audienceID = "da2b9d46-de76-498e-8746-471e8dd3d120"
 	// Replace with the actual issuer ID you've got from Wallester.
-	issuerID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+	issuerID = "75fb6c0e-3c45-4208-b579-5faa2145b404"
 	// API subject
-	subject  = "api-request"
+	subject = "api-request"
 	// Maximum JWT token expiration time
 	maxExpirationTime = 60 * time.Second
 )
