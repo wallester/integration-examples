@@ -32,7 +32,7 @@ func DoRequest(body []byte, token string) (*model.Result, error) {
 
 	defer response.Body.Close()
 
-	if response.StatusCode != 200 {
+	if response.StatusCode != http.StatusOK {
 		return nil, errors.Errorf("unexpected status code: status code=%d", response.StatusCode)
 	}
 
