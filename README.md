@@ -1,5 +1,7 @@
 # How to integrate with Wallester API
 
+To be able to run given code samples with our payment system you’ll need to have specific settings typically available to our customers. If you are planning to consider us to be your service provider and would like to try Wallester API, please contact us (https://wallester.com/contact-sales).
+
 ## Understand how JWT is generally used
 
 Please take a look at https://jwt.io/introduction/ 
