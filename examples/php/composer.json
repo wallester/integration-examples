@@ -1,0 +1,22 @@
+{
+    "name": "wallester/example",
+    "description": "example of JWT integration",
+    "type": "project",
+    "license": "UNLICENSED",
+    "autoload": {
+        "psr-4": {
+            "Wallester\\Example\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Wallester",
+            "email": "info@wallester.com"
+        }
+    ],
+    "require": {
+        "vlucas/phpdotenv": "^5.3",
+        "guzzlehttp/guzzle": "^7.3",
+        "firebase/php-jwt": "^5.4"
+    }
+}
