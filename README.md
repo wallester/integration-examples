@@ -169,3 +169,19 @@ Content-Length: 18
 
 {"message":"pong"}
 ```
+
+## Example PHP source code
+
+Please take a look at App.php
+
+In this PHP example we use the https://github.com/firebase/php-jwt library.
+
+The example code uses Composer package manager https://getcomposer.org/
+
+### Install dependencies
+
+	make install
+
+### Run the example code
+
+	make run
