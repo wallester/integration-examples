@@ -87,11 +87,11 @@ func VerifyResponse(result *model.Result) (*model.PingResponse, error) {
 		}
 
 		claims := token.Claims.(jwt.MapClaims)
-		if !claims.VerifyAudience(issuerID, true) {
+		if !claims.VerifyAudience(audienceID, true) {
 			return nil, errors.New("invalid audience ID")
 		}
 
-		if !claims.VerifyIssuer(audienceID, true) {
+		if !claims.VerifyIssuer(issuerID, true) {
 			return nil, errors.New("invalid issuer ID")
 		}
 
