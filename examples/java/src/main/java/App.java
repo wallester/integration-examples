@@ -33,7 +33,7 @@ public class App {
     private static final String audience = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
 
     // Replace this with actual Wallester API URL
-    private static final String apiURL = "http://xxx.wallester.eu/v1/test/ping";
+    private static final String apiURL = "https://xxx.wallester.eu/v1/test/ping";
     
     public static void main(String[] args) {
         try {

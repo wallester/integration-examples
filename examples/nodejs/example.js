@@ -10,7 +10,7 @@ const issuer = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
 const audience = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
 
 // Replace this with actual Wallester API URL
-const apiURL = "http://xxx.wallester.eu/v1/test/ping";
+const apiURL = "https://xxx.wallester.eu/v1/test/ping";
 
 const algorithm = "RS256";
 
