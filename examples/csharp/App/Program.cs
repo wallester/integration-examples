@@ -20,7 +20,7 @@ namespace App
         private static string _audience = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
 
         // Replace this with actual Wallester API URL
-        private static string _apiURL = "http://xxx.wallester.eu/v1/test/ping";
+        private static string _apiURL = "https://xxx.wallester.eu/v1/test/ping";
 
         private static string _subject = "api-request";
 
