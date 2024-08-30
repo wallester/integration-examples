@@ -1,10 +1,9 @@
 
 default: 
-	@msbuild App.sln /t:Build /p:Configuration=Release
+	@dotnet build App.sln --configuration Release
 
 deps:
-	@nuget restore
+	@dotnet restore
 
 run:
-	@dotnet App/bin/Release/netcoreapp2.0/App.dll
-
+	@dotnet App/bin/Release/netcoreapp8.0/App.dll
