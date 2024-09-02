@@ -68,7 +68,9 @@ namespace App
                 var wallesterPublicKey = ReadPublicKey("../../keys/example_wallester_public.cer");
             #endif
 
-            var responseBody = ExecuteRequest(signingCredentials, wallesterPublicKey);
+            var response = ExecuteRequest(signingCredentials);
+            ValidateResponse(response, wallesterPublicKey);
+            var responseBody = response.Content.ReadAsStringAsync().Result;
 
             Console.WriteLine("Response: " + responseBody);
         }
@@ -116,16 +118,16 @@ namespace App
             return key;
         }
 
-        private static string ExecuteRequest(SigningCredentials signingCredentials, SecurityKey wallesterPublicKey)
+        private static HttpResponseMessage ExecuteRequest(SigningCredentials signingCredentials)
         {
             #if UPLOAD_KYC_DOCUMENTS
-                return ExecuteUploadKycRequest(signingCredentials, wallesterPublicKey);
+                return ExecuteUploadKycRequest(signingCredentials);
             #else
-                return ExecutePingRequest(signingCredentials, wallesterPublicKey);
+                return ExecutePingRequest(signingCredentials);
             #endif
         }
 
-        private static string ExecuteUploadKycRequest(SigningCredentials signingCredentials, SecurityKey wallesterPublicKey)
+        private static HttpResponseMessage ExecuteUploadKycRequest(SigningCredentials signingCredentials)
         {
             if (!File.Exists(FilePath))
             {
@@ -142,16 +144,16 @@ namespace App
             };
 
             var content = CreateMultipartContent(uploadRequest);
-            return ExecuteHttpRequest(content, UploadKycDocumentPath, signingCredentials, wallesterPublicKey);
+            return ExecuteHttpRequest(content, UploadKycDocumentPath, signingCredentials);
         }
 
-        private static string ExecutePingRequest(SigningCredentials signingCredentials, SecurityKey wallesterPublicKey)
+        private static HttpResponseMessage ExecutePingRequest(SigningCredentials signingCredentials)
         {
             var request = new PingRequest { Message = "ping" };
             var json = JsonConvert.SerializeObject(request);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            return ExecuteHttpRequest(content, PingPath, signingCredentials, wallesterPublicKey);
+            return ExecuteHttpRequest(content, PingPath, signingCredentials);
         }
 
         private static MultipartFormDataContent CreateMultipartContent(UploadKycDocumentRequest uploadRequest)
@@ -167,7 +169,7 @@ namespace App
             return formDataContent;
         }
 
-        private static string ExecuteHttpRequest(HttpContent content, string path, SigningCredentials signingCredentials, SecurityKey wallesterPublicKey)
+        private static HttpResponseMessage ExecuteHttpRequest(HttpContent content, string path, SigningCredentials signingCredentials)
         {
             var requestBodyHash = CalculateRequestBodyHash(content.ReadAsByteArrayAsync().Result);
             var token = CreateToken(requestBodyHash, signingCredentials);
@@ -179,11 +181,8 @@ namespace App
 
             var apiPath = ApiUrl + path;
             var response = client.PostAsync(apiPath, content).Result;
-            var responseString = response.Content.ReadAsStringAsync().Result;
 
-            ValidateResponse(response, responseString, wallesterPublicKey);
-
-            return responseString;
+            return response;
         }
 
         private static string CalculateRequestBodyHash(byte[] body)
@@ -218,7 +217,7 @@ namespace App
             client.DefaultRequestHeaders.Add("X-Product-Code", ProductCode);
         }
 
-        private static void ValidateResponse(HttpResponseMessage response, string responseString, SecurityKey wallesterPublicKey)
+        private static void ValidateResponse(HttpResponseMessage response, SecurityKey wallesterPublicKey)
         {
             if (!response.Headers.TryGetValues("Authorization", out var bearerHeader))
             {
@@ -234,6 +233,7 @@ namespace App
             }
 
             Console.WriteLine("Response JWT token: " + responseToken);
+            var responseString = response.Content.ReadAsStringAsync().Result;
             var responseBodyHash = CalculateRequestBodyHash(Encoding.UTF8.GetBytes(responseString));
 
             try
