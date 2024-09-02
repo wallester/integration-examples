@@ -73,6 +73,49 @@ namespace App
             Console.WriteLine("Response: " + responseBody);
         }
 
+        private static SigningCredentials ReadSigningCredentialsFromString(string privateKeyPem)
+        {
+            var rsa = RSA.Create();
+            rsa.ImportFromPem(privateKeyPem.ToCharArray());
+
+            var key = new RsaSecurityKey(rsa);
+            return new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
+        }
+
+        private static RsaSecurityKey ReadPublicKeyFromString(string publicKeyPem)
+        {
+            var rsa = RSA.Create();
+            rsa.ImportFromPem(publicKeyPem.ToCharArray());
+
+            return new RsaSecurityKey(rsa);
+        }
+
+        // Reads signing credentials from a certificate file
+        private static SigningCredentials ReadSigningCredentials(string filename, string password)
+        {
+            var cert = new X509Certificate2(filename, password);
+            var key = new X509SecurityKey(cert);
+            return new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
+        }
+
+        // Reads public key from a PEM certificate
+        private static SecurityKey ReadPublicKey(string filename)
+        {
+            SecurityKey key;
+
+            using var f = new FileStream(filename, FileMode.Open, FileAccess.Read);
+            {
+                var size = (int)f.Length;
+                var rawData = new byte[size];
+                size = f.Read(rawData, 0, size);
+
+                var cert = new X509Certificate2(rawData);
+                key = new X509SecurityKey(cert);
+            }
+
+            return key;
+        }
+
         private static string ExecuteRequest(SigningCredentials signingCredentials, SecurityKey wallesterPublicKey)
         {
             #if UPLOAD_KYC_DOCUMENTS
@@ -80,15 +123,6 @@ namespace App
             #else
                 return ExecutePingRequest(signingCredentials, wallesterPublicKey);
             #endif
-        }
-
-        private static string ExecutePingRequest(SigningCredentials signingCredentials, SecurityKey wallesterPublicKey)
-        {
-            var request = new PingRequest { Message = "ping" };
-            var json = JsonConvert.SerializeObject(request);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            return ExecuteHttpRequest(content, PingPath, signingCredentials, wallesterPublicKey);
         }
 
         private static string ExecuteUploadKycRequest(SigningCredentials signingCredentials, SecurityKey wallesterPublicKey)
@@ -109,6 +143,15 @@ namespace App
 
             var content = CreateMultipartContent(uploadRequest);
             return ExecuteHttpRequest(content, UploadKycDocumentPath, signingCredentials, wallesterPublicKey);
+        }
+
+        private static string ExecutePingRequest(SigningCredentials signingCredentials, SecurityKey wallesterPublicKey)
+        {
+            var request = new PingRequest { Message = "ping" };
+            var json = JsonConvert.SerializeObject(request);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            return ExecuteHttpRequest(content, PingPath, signingCredentials, wallesterPublicKey);
         }
 
         private static MultipartFormDataContent CreateMultipartContent(UploadKycDocumentRequest uploadRequest)
@@ -141,6 +184,31 @@ namespace App
             ValidateResponse(response, responseString, wallesterPublicKey);
 
             return responseString;
+        }
+
+        private static string CalculateRequestBodyHash(byte[] body)
+        {
+            using var sha256 = SHA256.Create();
+            {
+                var hash = SHA256.HashData(body);
+                return Convert.ToBase64String(hash);
+            }
+        }
+
+        private static string CreateToken(string requestBodyHash, SigningCredentials signingCredentials)
+        {
+            var claims = new[]
+            {
+                new Claim("sub", Subject),
+                new Claim("rbh", requestBodyHash)
+            };
+
+            var notBefore = DateTime.UtcNow;
+            var expires = DateTime.UtcNow.AddMinutes(1);
+            var token = new JwtSecurityToken(Issuer, Audience, claims, notBefore, expires, signingCredentials);
+
+            var handler = new JwtSecurityTokenHandler();
+            return handler.WriteToken(token);
         }
 
         private static void SetDefaultHeaders(HttpClient client)
@@ -179,49 +247,6 @@ namespace App
             }
         }
 
-        // Reads signing credentials from a certificate file
-        private static SigningCredentials ReadSigningCredentials(string filename, string password)
-        {
-            var cert = new X509Certificate2(filename, password);
-            var key = new X509SecurityKey(cert);
-            return new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
-        }
-
-        // Reads public key from a PEM certificate
-        private static SecurityKey ReadPublicKey(string filename)
-        {
-            SecurityKey key;
-
-            using var f = new FileStream(filename, FileMode.Open, FileAccess.Read);
-            {
-                var size = (int)f.Length;
-                var rawData = new byte[size];
-                size = f.Read(rawData, 0, size);
-
-                var cert = new X509Certificate2(rawData);
-                key = new X509SecurityKey(cert);
-            }
-
-            return key;
-        }
-
-        private static SigningCredentials ReadSigningCredentialsFromString(string privateKeyPem)
-        {
-            var rsa = RSA.Create();
-            rsa.ImportFromPem(privateKeyPem.ToCharArray());
-
-            var key = new RsaSecurityKey(rsa);
-            return new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
-        }
-
-        private static RsaSecurityKey ReadPublicKeyFromString(string publicKeyPem)
-        {
-            var rsa = RSA.Create();
-            rsa.ImportFromPem(publicKeyPem.ToCharArray());
-
-            return new RsaSecurityKey(rsa);
-        }
-
         private static void VerifyToken(string token, string responseBodyHash, SecurityKey wallesterPublicKey)
         {
             var tokenValidationParameters = new TokenValidationParameters
@@ -257,31 +282,6 @@ namespace App
             {
                 throw new ApplicationException("invalid subject: " + jwtToken.Subject);
             }
-        }
-
-        private static string CalculateRequestBodyHash(byte[] body)
-        {
-            using var sha256 = SHA256.Create();
-            {
-                var hash = SHA256.HashData(body);
-                return Convert.ToBase64String(hash);
-            }
-        }
-
-        private static string CreateToken(string requestBodyHash, SigningCredentials signingCredentials)
-        {
-            var claims = new[]
-            {
-                new Claim("sub", Subject),
-                new Claim("rbh", requestBodyHash)
-            };
-
-            var notBefore = DateTime.UtcNow;
-            var expires = DateTime.UtcNow.AddMinutes(1);
-            var token = new JwtSecurityToken(Issuer, Audience, claims, notBefore, expires, signingCredentials);
-
-            var handler = new JwtSecurityTokenHandler();
-            return handler.WriteToken(token);
         }
     }
 }
