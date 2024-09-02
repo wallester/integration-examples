@@ -39,6 +39,7 @@ namespace App
         private const string FilePath = "../../testdata/file_name.jpg";
 
         #if READ_KEYS_FROM_STRINGS
+            // Replace this with actual private key
             private const string PrivateKeyPem = """
             -----BEGIN RSA PRIVATE KEY-----
             ...
@@ -47,6 +48,7 @@ namespace App
             -----END RSA PRIVATE KEY-----
             """;
 
+            // Replace this with actual public key
             private const string PublicKeyPem = """
             -----BEGIN PUBLIC KEY-----
             ...
