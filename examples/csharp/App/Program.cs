@@ -60,12 +60,14 @@ namespace App
 
         public static void Main(string[] args)
         {
+            SigningCredentials signingCredentials;
+            SecurityKey wallesterPublicKey;
             #if READ_KEYS_FROM_STRINGS
-                var signingCredentials = ReadSigningCredentialsFromString(PrivateKeyPem);
-                var wallesterPublicKey = ReadPublicKeyFromString(PublicKeyPem);
+                signingCredentials = ReadSigningCredentialsFromString(PrivateKeyPem);
+                wallesterPublicKey = ReadPublicKeyFromString(PublicKeyPem);
             #else
-                var signingCredentials = ReadSigningCredentials("../../keys/example_private.pkcs12", "123456");
-                var wallesterPublicKey = ReadPublicKey("../../keys/example_wallester_public.cer");
+                signingCredentials = ReadSigningCredentials("../../keys/example_private.pkcs12", "123456");
+                wallesterPublicKey = ReadPublicKey("../../keys/example_wallester_public.cer");
             #endif
 
             var response = ExecuteRequest(signingCredentials);
@@ -84,7 +86,7 @@ namespace App
             return new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
         }
 
-        private static RsaSecurityKey ReadPublicKeyFromString(string publicKeyPem)
+        private static SecurityKey ReadPublicKeyFromString(string publicKeyPem)
         {
             var rsa = RSA.Create();
             rsa.ImportFromPem(publicKeyPem.ToCharArray());
