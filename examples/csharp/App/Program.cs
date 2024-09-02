@@ -259,11 +259,6 @@ namespace App
 
         private static string CalculateRequestBodyHash(byte[] body)
         {
-            if (body.Length == 0)
-            {
-                return string.Empty;
-            }
-
             using var sha256 = SHA256.Create();
             {
                 var hash = SHA256.HashData(body);
