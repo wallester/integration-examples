@@ -6,4 +6,4 @@ deps:
 	@dotnet restore
 
 run:
-	@dotnet App/bin/Release/netcoreapp8.0/App.dll
+	@dotnet App/bin/Release/net8.0/App.dll
