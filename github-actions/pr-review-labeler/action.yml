@@ -1,0 +1,416 @@
+name: Pull request review labeler
+description: Add exactly one review-state label to a pull request based on review status.
+
+inputs:
+  github-token:
+    description: GitHub token used to read pull request reviews and update labels.
+    required: true
+  pull-request-number:
+    description: Pull request number to update. Defaults to the pull request from the event payload.
+    required: false
+  required-approvals:
+    description: Number of approving reviewers required before the ready-for-merge label is applied.
+    required: false
+    default: "2"
+  current-head-only:
+    description: Only count reviews submitted against the current pull request head SHA.
+    required: false
+    default: "true"
+  create-labels:
+    description: Create configured labels when they do not already exist.
+    required: false
+    default: "true"
+  ready-for-review-label:
+    description: Label used when the pull request is ready for the first review.
+    required: false
+    default: ready for review
+  ready-for-final-review-label:
+    description: Label used after at least one approval but fewer than the required approvals.
+    required: false
+    default: ready for final review
+  ready-for-merge-label:
+    description: Label used when the pull request has the required approvals.
+    required: false
+    default: ready for merge
+  changes-required-label:
+    description: Label used when any active reviewer has requested changes.
+    required: false
+    default: changes required
+  ready-for-review-color:
+    description: Color for the ready-for-review label.
+    required: false
+    default: 0E8A16
+  ready-for-final-review-color:
+    description: Color for the ready-for-final-review label.
+    required: false
+    default: FBCA04
+  ready-for-merge-color:
+    description: Color for the ready-for-merge label.
+    required: false
+    default: 1D76DB
+  changes-required-color:
+    description: Color for the changes-required label.
+    required: false
+    default: D93F0B
+  ready-for-review-description:
+    description: Description for the ready-for-review label.
+    required: false
+    default: PR is waiting for the first mandatory review.
+  ready-for-final-review-description:
+    description: Description for the ready-for-final-review label.
+    required: false
+    default: PR has at least one approval and is waiting for final review.
+  ready-for-merge-description:
+    description: Description for the ready-for-merge label.
+    required: false
+    default: PR has the mandatory approvals and is ready to merge.
+  changes-required-description:
+    description: Description for the changes-required label.
+    required: false
+    default: PR has an active changes-requested review.
+
+runs:
+  using: composite
+  steps:
+    - name: Update review labels
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9
+      env:
+        PULL_REQUEST_NUMBER: ${{ inputs.pull-request-number }}
+        REQUIRED_APPROVALS: ${{ inputs.required-approvals }}
+        CURRENT_HEAD_ONLY: ${{ inputs.current-head-only }}
+        CREATE_LABELS: ${{ inputs.create-labels }}
+        READY_FOR_REVIEW_LABEL: ${{ inputs.ready-for-review-label }}
+        READY_FOR_FINAL_REVIEW_LABEL: ${{ inputs.ready-for-final-review-label }}
+        READY_FOR_MERGE_LABEL: ${{ inputs.ready-for-merge-label }}
+        CHANGES_REQUIRED_LABEL: ${{ inputs.changes-required-label }}
+        READY_FOR_REVIEW_COLOR: ${{ inputs.ready-for-review-color }}
+        READY_FOR_FINAL_REVIEW_COLOR: ${{ inputs.ready-for-final-review-color }}
+        READY_FOR_MERGE_COLOR: ${{ inputs.ready-for-merge-color }}
+        CHANGES_REQUIRED_COLOR: ${{ inputs.changes-required-color }}
+        READY_FOR_REVIEW_DESCRIPTION: ${{ inputs.ready-for-review-description }}
+        READY_FOR_FINAL_REVIEW_DESCRIPTION: ${{ inputs.ready-for-final-review-description }}
+        READY_FOR_MERGE_DESCRIPTION: ${{ inputs.ready-for-merge-description }}
+        CHANGES_REQUIRED_DESCRIPTION: ${{ inputs.changes-required-description }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          function requiredEnv(name) {
+            const value = process.env[name]?.trim();
+            if (!value) {
+              throw new Error(`Missing required input: ${name}`);
+            }
+            return value;
+          }
+
+          function optionalEnv(name) {
+            return process.env[name]?.trim() ?? '';
+          }
+
+          function booleanEnv(name) {
+            const value = requiredEnv(name).toLowerCase();
+            if (value === 'true') {
+              return true;
+            }
+            if (value === 'false') {
+              return false;
+            }
+            throw new Error(`${name} must be true or false`);
+          }
+
+          function colorEnv(name) {
+            const color = requiredEnv(name).replace(/^#/, '');
+            if (!/^[0-9a-fA-F]{6}$/.test(color)) {
+              throw new Error(`${name} must be a 6-character hex color`);
+            }
+            return color;
+          }
+
+          function parsePullRequestNumber(value) {
+            if (!value) {
+              return null;
+            }
+
+            const trimmedValue = String(value).trim();
+            if (!/^[1-9][0-9]*$/.test(trimmedValue)) {
+              throw new Error('PULL_REQUEST_NUMBER must be a positive integer');
+            }
+            return Number.parseInt(trimmedValue, 10);
+          }
+
+          const requiredApprovalsValue = requiredEnv('REQUIRED_APPROVALS');
+          if (!/^[1-9][0-9]*$/.test(requiredApprovalsValue)) {
+            throw new Error('REQUIRED_APPROVALS must be a positive integer');
+          }
+          const requiredApprovals = Number.parseInt(requiredApprovalsValue, 10);
+
+          const currentHeadOnly = booleanEnv('CURRENT_HEAD_ONLY');
+          const createLabels = booleanEnv('CREATE_LABELS');
+
+          const reviewLabels = {
+            readyForReview: {
+              name: requiredEnv('READY_FOR_REVIEW_LABEL'),
+              color: colorEnv('READY_FOR_REVIEW_COLOR'),
+              description: optionalEnv('READY_FOR_REVIEW_DESCRIPTION'),
+            },
+            readyForFinalReview: {
+              name: requiredEnv('READY_FOR_FINAL_REVIEW_LABEL'),
+              color: colorEnv('READY_FOR_FINAL_REVIEW_COLOR'),
+              description: optionalEnv('READY_FOR_FINAL_REVIEW_DESCRIPTION'),
+            },
+            readyForMerge: {
+              name: requiredEnv('READY_FOR_MERGE_LABEL'),
+              color: colorEnv('READY_FOR_MERGE_COLOR'),
+              description: optionalEnv('READY_FOR_MERGE_DESCRIPTION'),
+            },
+            changesRequired: {
+              name: requiredEnv('CHANGES_REQUIRED_LABEL'),
+              color: colorEnv('CHANGES_REQUIRED_COLOR'),
+              description: optionalEnv('CHANGES_REQUIRED_DESCRIPTION'),
+            },
+          };
+
+          const managedLabelNames = Object.values(reviewLabels).map((label) => label.name);
+          if (new Set(managedLabelNames).size !== managedLabelNames.length) {
+            throw new Error('Review-state label names must be unique');
+          }
+
+          // Remove labels owned by the replaced workflows so PRs retain one review state.
+          managedLabelNames.push('review in progress', 'ready for 2nd review');
+
+          const { owner, repo } = context.repo;
+          const payloadPullRequest = context.payload.pull_request;
+          const explicitPullRequestNumber =
+            parsePullRequestNumber(optionalEnv('PULL_REQUEST_NUMBER')) ??
+            payloadPullRequest?.number;
+
+          async function ensureLabel(label) {
+            if (!createLabels) {
+              return;
+            }
+
+            try {
+              await github.rest.issues.getLabel({
+                owner,
+                repo,
+                name: label.name,
+              });
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+
+              try {
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name: label.name,
+                  color: label.color,
+                  description: label.description,
+                });
+              } catch (createError) {
+                if (createError.status !== 422) {
+                  throw createError;
+                }
+
+                core.info(`Label already exists: ${label.name}`);
+              }
+            }
+          }
+
+          function reviewStateForLog(reviewState) {
+            if (reviewState.state !== 'APPROVED' || reviewState.countsAsApproval) {
+              return reviewState.state;
+            }
+            return `${reviewState.state} (non-current)`;
+          }
+
+          const countingPermissions = new Set(['admin', 'maintain', 'write']);
+          const reviewerPermissionCache = new Map();
+
+          async function reviewerCanAffectMerge(review) {
+            const login = review.user?.login;
+            if (!login) {
+              return false;
+            }
+
+            if (reviewerPermissionCache.has(login)) {
+              return reviewerPermissionCache.get(login);
+            }
+
+            try {
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner,
+                repo,
+                username: login,
+              });
+              const canAffectMerge = countingPermissions.has(data.permission);
+              if (!canAffectMerge) {
+                core.info(`Ignoring review from ${login}: permission is ${data.permission || 'none'}.`);
+              }
+              reviewerPermissionCache.set(login, canAffectMerge);
+              return canAffectMerge;
+            } catch (error) {
+              if (error.status === 404) {
+                core.info(`Ignoring review from ${login}: collaborator permission was not found.`);
+                reviewerPermissionCache.set(login, false);
+                return false;
+              }
+              throw error;
+            }
+          }
+
+          async function latestOpinionatedReviewStates(reviews, pullRequest) {
+            const opinionatedStates = new Set(['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED']);
+            const latestByReviewer = new Map();
+
+            const candidateReviews = reviews
+              .filter((review) => review.user?.login !== pullRequest.user.login)
+              .filter((review) => opinionatedStates.has(review.state))
+              .sort((left, right) => new Date(left.submitted_at) - new Date(right.submitted_at));
+
+            for (const review of candidateReviews) {
+              if (await reviewerCanAffectMerge(review)) {
+                const reviewerKey = review.user?.id ?? review.user?.login;
+                if (reviewerKey) {
+                  if (review.state === 'DISMISSED') {
+                    latestByReviewer.delete(reviewerKey);
+                    continue;
+                  }
+
+                  latestByReviewer.set(reviewerKey, {
+                    state: review.state,
+                    countsAsApproval:
+                      review.state === 'APPROVED' &&
+                      (!currentHeadOnly || review.commit_id === pullRequest.head.sha),
+                  });
+                }
+              }
+            }
+
+            return [...latestByReviewer.values()];
+          }
+
+          function labelForReviewState(reviewStates, reviewDecision) {
+            if (
+              reviewDecision === 'CHANGES_REQUESTED' ||
+              reviewStates.some((reviewState) => reviewState.state === 'CHANGES_REQUESTED')
+            ) {
+              return reviewLabels.changesRequired.name;
+            }
+
+            const approvalCount = reviewStates.filter((reviewState) => reviewState.countsAsApproval).length;
+            if (approvalCount >= requiredApprovals && (!reviewDecision || reviewDecision === 'APPROVED')) {
+              return reviewLabels.readyForMerge.name;
+            }
+
+            if (approvalCount > 0) {
+              return reviewLabels.readyForFinalReview.name;
+            }
+
+            return reviewLabels.readyForReview.name;
+          }
+
+          async function pullRequestReviewDecision(issue_number) {
+            const result = await github.graphql(
+              `query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    reviewDecision
+                  }
+                }
+              }`,
+              {
+                owner,
+                repo,
+                number: issue_number,
+              },
+            );
+
+            return result.repository.pullRequest.reviewDecision;
+          }
+
+          async function removeLabelIfPresent(issue_number, name, currentLabelNames) {
+            if (!currentLabelNames.has(name)) {
+              return;
+            }
+
+            try {
+              await github.rest.issues.removeLabel({
+                owner,
+                repo,
+                issue_number,
+                name,
+              });
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+          }
+
+          await Promise.all(Object.values(reviewLabels).map(ensureLabel));
+
+          async function updatePullRequestLabels(issue_number) {
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: issue_number,
+            });
+
+            if (pullRequest.state !== 'open') {
+              core.info(`PR #${issue_number} is no longer open. Skipping review label update.`);
+              return;
+            }
+
+            if (payloadPullRequest?.number === issue_number && payloadPullRequest?.head?.sha && payloadPullRequest.head.sha !== pullRequest.head.sha) {
+              core.info(`Event head ${payloadPullRequest.head.sha} is stale. Using current head ${pullRequest.head.sha}.`);
+            }
+
+            let nextLabel = null;
+            if (pullRequest.draft) {
+              core.info(`Draft PR #${issue_number} detected. Removing managed review labels.`);
+            } else {
+              const reviews = await github.paginate(github.rest.pulls.listReviews, {
+                owner,
+                repo,
+                pull_number: issue_number,
+                per_page: 100,
+              });
+              const reviewStates = await latestOpinionatedReviewStates(reviews, pullRequest);
+              const reviewDecision = await pullRequestReviewDecision(issue_number);
+              nextLabel = labelForReviewState(reviewStates, reviewDecision);
+              core.info(`PR #${issue_number} review states: ${reviewStates.map(reviewStateForLog).join(', ') || 'none'}`);
+              core.info(`PR #${issue_number} GitHub review decision: ${reviewDecision || 'not set'}`);
+              core.info(`PR #${issue_number} next review label: ${nextLabel}`);
+            }
+
+            const currentLabels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const currentLabelNames = new Set(currentLabels.map((label) => label.name));
+
+            await Promise.all(
+              managedLabelNames
+                .filter((name) => name !== nextLabel)
+                .map((name) => removeLabelIfPresent(issue_number, name, currentLabelNames)),
+            );
+
+            if (nextLabel && !currentLabelNames.has(nextLabel)) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number,
+                labels: [nextLabel],
+              });
+            }
+          }
+
+          if (!explicitPullRequestNumber) {
+            core.info('No pull request found. Skipping review label update.');
+            return;
+          }
+
+          await updatePullRequestLabels(explicitPullRequestNumber);

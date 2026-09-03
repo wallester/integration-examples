@@ -1,0 +1,76 @@
+name: Pull request review labels
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, converted_to_draft, synchronize]
+  pull_request_review:
+    types: [submitted, dismissed]
+  schedule:
+    - cron: "43 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  targets:
+    # Fork and Dependabot review events have read-only tokens; daily refresh covers them.
+    if: >-
+      github.event_name != 'pull_request_review' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.user.login != 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      numbers: ${{ steps.targets.outputs.result }}
+    steps:
+      - name: Select pull requests
+        id: targets
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9
+        with:
+          script: |
+            if (context.payload.pull_request) {
+              return [context.payload.pull_request.number];
+            }
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              ...context.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            return pulls.map(pull => pull.number);
+
+  update-review-labels:
+    needs: targets
+    if: needs.targets.outputs.numbers != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        number: ${{ fromJSON(needs.targets.outputs.numbers) }}
+    concurrency:
+      group: pull-request-review-labels-pr-${{ matrix.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out trusted action source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: |
+            github-actions/pr-review-labeler
+
+      - name: Update review labels
+        # The local action is available only after the install PR reaches the default branch.
+        if: hashFiles('github-actions/pr-review-labeler/action.yml') != ''
+        uses: ./github-actions/pr-review-labeler
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ matrix.number }}
+          required-approvals: "3"
