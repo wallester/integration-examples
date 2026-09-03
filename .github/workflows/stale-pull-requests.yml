@@ -1,0 +1,87 @@
+name: Close stale pull requests
+
+on:
+  schedule:
+    - cron: "17 1 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Log candidates without changing pull requests
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: stale-pull-requests
+  cancel-in-progress: false
+
+jobs:
+  stale:
+    name: Mark and close stale pull requests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      # actions/stale saves scan progress in the Actions cache between bounded runs.
+      actions: write
+    steps:
+      - name: Ensure required labels exist
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9
+        with:
+          script: |
+            for (const label of [
+              {name: 'stale', color: 'ededed', description: 'PR inactive for 7 days; closes after 7 more days.'},
+              {name: 'keep-open', color: '0e8a16', description: 'Exempt this PR from automatic stale closure.'},
+            ]) {
+              try {
+                await github.rest.issues.getLabel({...context.repo, name: label.name});
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                if (context.eventName === 'workflow_dispatch' && context.payload.inputs?.dry_run !== 'false') {
+                  core.info(`Dry run: missing label ${label.name}; no label created.`);
+                  continue;
+                }
+                try {
+                  await github.rest.issues.createLabel({...context.repo, ...label});
+                } catch (createError) {
+                  if (createError.status !== 422) throw createError;
+                  await github.rest.issues.getLabel({...context.repo, name: label.name});
+                }
+              }
+            }
+
+      - name: Process stale pull requests
+        uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93  # v11.0.0
+        with:
+          repo-token: ${{ github.token }}
+          days-before-issue-stale: -1
+          days-before-issue-close: -1
+          remove-issue-stale-when-updated: false
+          days-before-pr-stale: 7
+          days-before-pr-close: 7
+          stale-pr-label: "stale"
+          exempt-pr-labels: "keep-open"
+          exempt-draft-pr: false
+          remove-pr-stale-when-updated: true
+          stale-pr-message: >-
+            This pull request has had no activity for 7 days and is now marked
+            `stale`. It will be closed in 7 days unless there is new activity.
+            Comment or push an update to reset the timer. Add `keep-open` if it
+            must remain open without activity.
+          close-pr-message: >-
+            Closing this pull request after the 7-day stale grace period without
+            activity. This workflow does not delete the branch. Reopen the pull
+            request when work resumes.
+          delete-branch: false
+          operations-per-run: 200
+          sort-by: updated
+          ascending: true
+          enable-statistics: true
+          debug-only: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
