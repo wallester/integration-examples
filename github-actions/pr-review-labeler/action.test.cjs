@@ -67,23 +67,38 @@ for (const scenario of scenarios) {
 }
 
 const workflowDir = path.resolve(__dirname, '../../.github/workflows');
-const targetScript = new AsyncFunction('github', 'context', embeddedScript(path.join(workflowDir, 'pull-request-review-labels.yml')));
+const reviewWorkflow = fs.readFileSync(path.join(workflowDir, 'pull-request-review-labels.yml'), 'utf8');
 for (const scenario of [
-  {name: 'PR event selects only its PR', payload: {pull_request: {number: 17}}, pulls: [], expected: [17], calls: 0},
-  {name: 'manual refresh selects all paginated open PRs', payload: {}, pulls: [{number: 17}, {number: 21}], expected: [17, 21], calls: 1},
-  {name: 'empty repository emits no matrix jobs', payload: {}, pulls: [], expected: [], calls: 1},
+  {name: 'review updates run only for PR lifecycle and review events', check() {
+    assert.equal(reviewWorkflow.match(/^on:\n([\s\S]*?)\npermissions:/m)[1],
+      '  pull_request_target:\n    types:\n      - opened\n      - reopened\n      - ready_for_review\n      - converted_to_draft\n      - synchronize\n  pull_request_review:\n    types:\n      - submitted\n      - dismissed\n');
+  }},
+  {name: 'one label job replaces per-PR scan and target-selection jobs', check() {
+    const jobs = reviewWorkflow.split('\njobs:\n')[1];
+    assert.deepEqual([...jobs.matchAll(/^  ([\w-]+):$/gm)].map(match => match[1]), ['update-review-labels']);
+    assert.doesNotMatch(jobs, /^    (needs|strategy):/m);
+    assert.match(jobs, /^    if: github\.event\.pull_request != null$/m);
+  }},
+  {name: 'superseded updates are cancelled only within the same PR', check() {
+    assert.match(reviewWorkflow, /^      group: pull-request-review-labels-pr-\$\{\{ github\.event\.pull_request\.number \}\}$/m);
+    assert.match(reviewWorkflow, /^      cancel-in-progress: true$/m);
+  }},
+  {name: 'label-write job executes trusted source without persisted credentials', check() {
+    assert.match(reviewWorkflow, /^          ref: \$\{\{ github\.event\.repository\.default_branch \}\}$/m);
+    assert.match(reviewWorkflow, /^          persist-credentials: false$/m);
+    assert.match(reviewWorkflow, /^        uses: actions\/checkout@[a-f0-9]{40}/m);
+    assert.match(reviewWorkflow, /^        uses: \.\/github-actions\/pr-review-labeler$/m);
+    assert.doesNotMatch(reviewWorkflow, /pull_request\.head/);
+  }},
+  {name: 'label updates use event PR number and explicit scoped permissions', check() {
+    assert.match(reviewWorkflow, /^          pull-request-number: \$\{\{ github\.event\.pull_request\.number \}\}$/m);
+    assert.match(reviewWorkflow, /^    permissions:\n      contents: read\n      issues: write\n      pull-requests: write$/m);
+    assert.doesNotMatch(reviewWorkflow, /write-all/);
+  }},
 ]) {
-  test(scenario.name, async () => {
-    let calls = 0;
-    const github = {rest: {pulls: {list() {}}}, paginate: async (_method, args) => {
-      calls++;
-      assert.equal(args.state, 'open');
-      assert.equal(args.per_page, 100);
-      return scenario.pulls;
-    }};
-    const numbers = await targetScript(github, {repo: {owner: 'example', repo: 'example'}, payload: scenario.payload});
-    assert.deepEqual(numbers, scenario.expected);
-    assert.equal(calls, scenario.calls);
+  test(scenario.name, () => {
+    // Assert the execution and trust boundaries that keep label maintenance inexpensive and safe.
+    scenario.check();
   });
 }
 

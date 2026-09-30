@@ -14,13 +14,12 @@ removes two legacy review labels, and skips PRs closed while a refresh was queue
 - Only reviewers with write, maintain, or admin permission count. Approval counts use the latest opinionated review per reviewer; dismissed reviews clear that opinion.
 - Review labels are advisory. Branch protection, required checks, code owners, conflicts, and other merge rules remain authoritative.
 
-The workflow refreshes labels on PR lifecycle and review events, daily, and through
-**Actions → Pull request review labels → Run workflow**. Manual and daily runs cover
-all open PRs, including existing PRs with no new activity. Fork and Dependabot review
-events are refreshed by the daily/manual run because their review-event tokens are read-only.
-Each run checks out the trusted default branch with persisted credentials disabled.
-It never executes PR head code with label-write permissions. The install PR skips the
-label step until this local action exists on the default branch.
+The workflow matches monorepo's event-driven execution: one job updates the event PR
+on lifecycle and review events, and newer runs cancel older updates for that PR.
+There are no daily scans, manual refreshes, or per-PR matrices. Existing inactive PRs
+and missed or read-only fork/Dependabot review events are not periodically reconciled.
+Each run checks out the trusted default branch with persisted credentials disabled;
+it never executes PR head code with label-write permissions.
 
 The configured approval threshold is **3**. It reflects the inspected
 default-branch protection and rulesets at rollout time; keep it aligned with policy changes.
