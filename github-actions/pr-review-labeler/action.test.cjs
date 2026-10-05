@@ -79,9 +79,10 @@ for (const scenario of [
     assert.doesNotMatch(jobs, /^    (needs|strategy):/m);
     assert.match(jobs, /^    if: github\.event\.pull_request != null$/m);
   }},
-  {name: 'superseded updates are cancelled only within the same PR', check() {
+  {name: 'updates are queued without cancellation within the same PR', check() {
     assert.match(reviewWorkflow, /^      group: pull-request-review-labels-pr-\$\{\{ github\.event\.pull_request\.number \}\}$/m);
-    assert.match(reviewWorkflow, /^      cancel-in-progress: true$/m);
+    assert.match(reviewWorkflow, /^      cancel-in-progress: false$/m);
+    assert.match(reviewWorkflow, /^      queue: max$/m);
   }},
   {name: 'label-write job executes trusted source without persisted credentials', check() {
     assert.match(reviewWorkflow, /^          ref: \$\{\{ github\.event\.repository\.default_branch \}\}$/m);
