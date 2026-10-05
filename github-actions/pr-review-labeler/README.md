@@ -15,7 +15,10 @@ removes two legacy review labels, and skips PRs closed while a refresh was queue
 - Review labels are advisory. Branch protection, required checks, code owners, conflicts, and other merge rules remain authoritative.
 
 The workflow matches monorepo's event-driven execution: one job updates the event PR
-on lifecycle and review events, and newer runs cancel older updates for that PR.
+on lifecycle and review events, and updates queue per PR without cancelling earlier runs.
+The queue permits up to 100 pending runs per PR; overflow can still be cancelled.
+Waiting runs do not occupy a runner, but completing more events increases billed
+runner usage. Read-only fork/Dependabot token restrictions still apply.
 There are no daily scans, manual refreshes, or per-PR matrices. Existing inactive PRs
 and missed or read-only fork/Dependabot review events are not periodically reconciled.
 Each run checks out the trusted default branch with persisted credentials disabled;

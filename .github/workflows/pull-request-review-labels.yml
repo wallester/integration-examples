@@ -28,7 +28,9 @@ jobs:
       pull-requests: write
     concurrency:
       group: pull-request-review-labels-pr-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
+      # Keep superseded events from leaving cancelled checks on an otherwise healthy PR.
+      cancel-in-progress: false
+      queue: max
     steps:
       - name: Check out trusted action source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
